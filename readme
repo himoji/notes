@@ -1,0 +1,2 @@
+npx tailwindcss -i ./src/input.css -o ./dist/output.css
+then npm rujn dev then |> gren butn
