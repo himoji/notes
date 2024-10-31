@@ -1,97 +1,73 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { toast } from '@/hooks/use-toast';
 import { Note } from '@/types';
+import { v4 as uuidv4 } from 'uuid';
 
-export const useNotes = () => {
+export function useNotes() {
     const [notes, setNotes] = useState<Note[]>([]);
     const [selectedNote, setSelectedNote] = useState<Note | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        loadNotes();
-    }, []);
-
     const loadNotes = async () => {
         try {
-            setIsLoading(true);
             const loadedNotes = await invoke<Note[]>('get_notes');
             setNotes(loadedNotes);
-            if (loadedNotes.length > 0 && !selectedNote) {
-                setSelectedNote(loadedNotes[0]);
-            }
+            return loadedNotes;
         } catch (error) {
-            toast({
-                title: "Error",
-                description: "Failed to load notes",
-                variant: "destructive",
-            });
-        } finally {
-            setIsLoading(false);
+            console.error('Failed to load notes:', error);
+            return [];
         }
     };
+
+    useEffect(() => {
+        const init = async () => {
+            setIsLoading(true);
+            await loadNotes();
+            setIsLoading(false);
+        };
+        init();
+    }, []);
 
     const createNewNote = async () => {
-        try {
-            const newNote: Note = {
-                id: crypto.randomUUID(),
-                title: 'New Note',
-                content: '# New Note\n\nStart typing...',
-                datetime: new Date().toISOString(),
-                attachments: []
-            };
+        const newNote: Note = {
+            id: uuidv4(),
+            title: 'Untitled',
+            content: '',
+            datetime: (Date.now() / 1000).toString(),
+            attachments: []
+        };
 
+        try {
             await invoke('save_note', { note: newNote });
-            setNotes([newNote, ...notes]);
-            setSelectedNote(newNote);
-            toast({
-                title: "Success",
-                description: "New note created",
-            });
-        } catch (error) {
-            toast({
-                title: "Error",
-                description: "Failed to create note",
-                variant: "destructive",
-            });
-        }
-    };
-
-    const updateNote = async (noteToUpdate: Note) => {
-        try {
-            await invoke('save_note', { note: noteToUpdate });
-            const updatedNotes = notes.map(note =>
-                note.id === noteToUpdate.id ? noteToUpdate : note
-            );
+            const updatedNotes = await loadNotes();
             setNotes(updatedNotes);
-            setSelectedNote(noteToUpdate);
+            setSelectedNote(newNote); // Immediately select the new note
         } catch (error) {
-            toast({
-                title: "Error",
-                description: "Failed to update note",
-                variant: "destructive",
-            });
+            console.error('Failed to create note:', error);
         }
     };
 
-    const deleteNote = async (noteId: string) => {
+    const updateNote = async (note: Note) => {
         try {
-            await invoke('delete_note', { noteId });
-            const newNotes = notes.filter(note => note.id !== noteId);
-            setNotes(newNotes);
-            if (selectedNote?.id === noteId) {
-                setSelectedNote(newNotes[0] || null);
-            }
-            toast({
-                title: "Success",
-                description: "Note deleted",
-            });
+            await invoke('save_note', { note });
+            const updatedNotes = await loadNotes();
+            setNotes(updatedNotes);
+            setSelectedNote(note); // Keep the current note selected
         } catch (error) {
-            toast({
-                title: "Error",
-                description: "Failed to delete note",
-                variant: "destructive",
-            });
+            console.error('Failed to update note:', error);
+        }
+    };
+
+    const deleteNote = async (id: string) => {
+        try {
+            await invoke('delete_note', { noteId: id });
+            const updatedNotes = await loadNotes();
+            setNotes(updatedNotes);
+            if (selectedNote?.id === id) {
+                setSelectedNote(updatedNotes[0] || null);
+            }
+        } catch (error) {
+            console.error('Failed to delete note:', error);
         }
     };
 
@@ -104,4 +80,4 @@ export const useNotes = () => {
         updateNote,
         deleteNote
     };
-};
+}

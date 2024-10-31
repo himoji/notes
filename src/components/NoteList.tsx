@@ -4,7 +4,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Trash2, Sun, Moon } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Note } from '@/types';
-import { formatDateTime } from '@/utils/dateFormat';
 
 interface NoteListProps {
     notes: Note[];
@@ -15,7 +14,6 @@ interface NoteListProps {
     onCreateNote: () => void;
     onThemeToggle: (isDark: boolean) => void;
 }
-
 export const NoteList: React.FC<NoteListProps> = ({
                                                       notes,
                                                       selectedNote,
@@ -26,7 +24,7 @@ export const NoteList: React.FC<NoteListProps> = ({
                                                       onThemeToggle
                                                   }) => {
     return (
-        <div className="w-72 p-4 flex flex-col dark:bg-gray-800">
+        <div className="flex flex-col h-full p-4 dark:bg-gray-800">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold dark:text-white">Notes</h2>
                 <div className="flex items-center gap-2">
@@ -43,8 +41,8 @@ export const NoteList: React.FC<NoteListProps> = ({
                 </div>
             </div>
 
-            <ScrollArea className="flex-grow">
-                <div className="space-y-2">
+            <ScrollArea className="flex-1">
+                <div className="space-y-2 pr-4">
                     {notes.map(note => (
                         <div
                             key={note.id}
@@ -53,17 +51,15 @@ export const NoteList: React.FC<NoteListProps> = ({
                                     ? 'bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800'
                                     : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                             }`}
+                            onClick={() => onNoteSelect(note)}
                         >
-                            <div
-                                className="flex flex-col"
-                                onClick={() => onNoteSelect(note)}
-                            >
-                                <div className="font-medium truncate dark:text-white">{note.title}</div>
+                            <div className="pr-8">
+                                <div className="font-medium truncate dark:text-white">{note.title || 'Untitled'}</div>
                                 <div className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3">
                                     {note.content}
                                 </div>
                                 <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                    {formatDateTime(note.datetime)}
+                                    {new Date(Number(note.datetime) * 1000).toLocaleString()}
                                 </div>
                             </div>
                             <Button

@@ -71,9 +71,9 @@ const App: React.FC = () => {
     }
 
     return (
-        <div className={`h-screen max-h-screen p-4 ${isDark ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
-            <div className="h-full flex gap-4">
-                <Card className="w-72">
+        <div className="h-screen flex flex-col p-4 dark:bg-gray-900">
+            <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
+                <Card className="w-72 flex-shrink-0 overflow-hidden">
                     <NoteList
                         notes={notes}
                         selectedNote={selectedNote}
@@ -85,9 +85,10 @@ const App: React.FC = () => {
                     />
                 </Card>
 
-                <Card className="flex-grow p-4 flex flex-col dark:bg-gray-800">
+                <Card className="flex-1 flex flex-col dark:bg-gray-800 p-4 overflow-scroll" style={{overflowY:"scroll"}}>
                     {selectedNote ? (
                         <NoteEditor
+                            key={selectedNote.id} // Add key prop to force re-render
                             note={selectedNote}
                             viewMode={viewMode}
                             onUpdateNote={updateNote}
