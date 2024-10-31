@@ -1,12 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{ UriSchemeContext};
 use serde::{Deserialize, Serialize};
 use std::fs::{self,File};
 use std::io::Write;
 use std::path::PathBuf;
 use tauri::{Manager, Wry, AppHandle};
-use tauri::http::{Request, Response};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Note {
@@ -170,54 +168,31 @@ async fn save_clipboard_image(app_handle: AppHandle, note_id: String, file_name:
     Ok(file_name)
 }
 
-// Custom protocol handler for attachments
-fn handle_attachment_protocol(
-    context: UriSchemeContext<Wry>,
-    request: Request<Vec<u8>>,
-) -> Response<Vec<u8>> {
-    let app_handle = context.app_handle();
-    let url = request.uri().path();
-    let parts: Vec<&str> = url.split('/').collect();
-
-    if parts.len() != 3 {
-        return Response::builder()
-            .status(400)
-            .body(Vec::new())
-            .expect("Failed to build response");
-    }
-
-    let note_id = parts[1];
-    let filename = parts[2];
-    let attachment_path = get_attachments_dir(&app_handle, note_id).join(filename);
+#[tauri::command]
+async fn serve_attachment(
+    app: tauri::AppHandle,
+    note_id: String,
+    file_name: String,
+) -> Result<Vec<u8>, String> {
+    let attachment_path = get_attachments_dir(&app, &note_id).join(&file_name);
 
     if !attachment_path.exists() {
-        return Response::builder()
-            .status(404)
-            .body(Vec::new())
-            .expect("Failed to build response");
+        return Err("File not found".into());
     }
 
-    let content = fs::read(&attachment_path).unwrap_or_default();
-    let content_type = mime_guess::from_path(&attachment_path)
-        .first_or_octet_stream()
-        .to_string();
-
-    Response::builder()
-        .header("Content-Type", content_type)
-        .body(content)
-        .expect("Failed to build response")
+    fs::read(&attachment_path).map_err(|e| e.to_string())
 }
 
 
 fn main() {
     tauri::Builder::default()
-        .register_uri_scheme_protocol("note-attachment", handle_attachment_protocol)
         .invoke_handler(tauri::generate_handler![
             get_notes,
             save_note,
             delete_note,
             save_attachment,
-            save_clipboard_image
+            save_clipboard_image,
+            serve_attachment
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
