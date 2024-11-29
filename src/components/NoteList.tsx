@@ -59,7 +59,7 @@ export const NoteList: React.FC<NoteListProps> = ({
                                     {note.content}
                                 </div>
                                 <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                    {new Date(Number(note.datetime) * 1000).toLocaleString()}
+                                    {new Date(Number(note.datetime) * 1000).toLocaleDateString("de-DE")}
                                 </div>
                             </div>
                             <Button

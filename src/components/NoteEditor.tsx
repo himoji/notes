@@ -201,7 +201,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                         )}
                     </Button>
                     <div className="text-sm text-gray-400 dark:text-gray-500">
-                        {new Date(Number(note.datetime) * 1000).toLocaleString()}
+                        {new Date(Number(note.datetime) * 1000).toLocaleString("de-DE")}
                     </div>
                 </div>
             </div>
