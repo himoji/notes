@@ -85,7 +85,7 @@ const App: React.FC = () => {
                     />
                 </Card>
 
-                <Card className="flex-1 flex flex-col dark:bg-gray-800 p-4 overflow-scroll" style={{overflowY:"scroll"}}>
+                <Card className="flex-1 flex flex-col dark:bg-gray-800 p-4 overflow-scroll">
                     {selectedNote ? (
                         <NoteEditor
                             key={selectedNote.id} // Add key prop to force re-render

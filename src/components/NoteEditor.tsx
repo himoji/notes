@@ -223,7 +223,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                                 remarkPlugins={[remarkGfm]}
                                 components={customMarkdownComponents}
                             >
-                                {content}
+                                {content.split('\n').slice(1).join('\n')}
+
+
                             </ReactMarkdown>
                         </div>
                     </div>
