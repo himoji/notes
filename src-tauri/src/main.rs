@@ -393,16 +393,26 @@ async fn share_notes(
             attachments_data,
         };
 
-        // Send the sync request to the peer
-        let client_clone = client.clone();
+        // Send the sync request to the peer - create a new client with custom settings for each request
+        // to avoid payload size issues
         let url_clone = url.clone();
 
         tokio::spawn(async move {
             println!("Sending sync request for note: {}", note.id);
-            let result = client_clone
+
+            // Create a custom client with larger limits
+            let custom_client = reqwest::Client::builder()
+                .pool_max_idle_per_host(0) // Don't reuse connections
+                .tcp_keepalive(None) // Disable keepalive
+                .tcp_nodelay(true) // Prioritize low latency
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
+
+            // Use a longer timeout for larger payloads
+            let result = custom_client
                 .post(&url_clone)
                 .json(&sync_request)
-                .timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(60)) // Increase timeout to 60 seconds
                 .send()
                 .await;
 
@@ -685,7 +695,7 @@ fn main() {
                     let response_handle = app_handle.clone();
 
                     tokio::spawn(async move {
-                        // Set up the HTTP server using axum
+                        // Set up the HTTP server using axum with increased limits
                         let router = axum::Router::new()
                             .route(
                                 "/sync/request",
@@ -854,7 +864,13 @@ fn main() {
                                 ),
                             );
 
-                        if let Err(e) = axum::serve(listener, router).await {
+                        // Configure the router with proper limits for large attachments
+                        let app = router.layer(
+                            tower::ServiceBuilder::new()
+                                .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024)), // 50 MB limit
+                        );
+
+                        if let Err(e) = axum::serve(listener, app).await {
                             println!("HTTP server error: {}", e);
                         }
                     });
