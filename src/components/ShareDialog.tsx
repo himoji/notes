@@ -6,21 +6,21 @@ import { Button } from "@/components/ui/button";
 import { X, Share } from "lucide-react";
 
 interface ShareDialogProps {
-  note: Note;
+  notes: Note[];
   peers: PeerDevice[];
-  onShare: (noteId: string, peerId: string) => void;
+  onShare: (noteIds: string[], peerId: string) => void;
   onClose: () => void;
   isSharing: boolean;
 }
 
 export const ShareDialog: React.FC<ShareDialogProps> = ({
-  note,
+  notes,
   peers,
   onShare,
   onClose,
   isSharing,
 }) => {
-  if (!note) return null;
+  if (!notes || notes.length === 0) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -28,7 +28,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold dark:text-white">
-              Share Note
+              Share Notes
             </h2>
             <Button
               variant="ghost"
@@ -42,7 +42,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
           <div className="mb-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Share "{note.title}" with:
+              Share {notes.length} note{notes.length > 1 ? "s" : ""} with:
             </p>
           </div>
 
@@ -66,7 +66,12 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                     </div>
                     <Button
                       size="sm"
-                      onClick={() => onShare(note.id, peer.id)}
+                      onClick={() =>
+                        onShare(
+                          notes.map((note) => note.id),
+                          peer.id
+                        )
+                      }
                       disabled={isSharing}
                     >
                       <Share className="h-4 w-4 mr-2" />

@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, Sun, Moon, Share2 } from "lucide-react";
+import { Plus, Trash2, Sun, Moon, Share2, Share } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Note } from "@/types";
 
@@ -14,6 +14,7 @@ interface NoteListProps {
   onCreateNote: () => void;
   onThemeToggle: (isDark: boolean) => void;
   onShareNote?: (note: Note) => void;
+  onShareAllNotes?: () => void;
 }
 export const NoteList: React.FC<NoteListProps> = ({
   notes,
@@ -24,6 +25,7 @@ export const NoteList: React.FC<NoteListProps> = ({
   onCreateNote,
   onThemeToggle,
   onShareNote,
+  onShareAllNotes,
 }) => {
   return (
     <div className="flex flex-col h-full p-4 dark:bg-gray-800">
@@ -43,6 +45,18 @@ export const NoteList: React.FC<NoteListProps> = ({
           </Button>
         </div>
       </div>
+
+      {onShareAllNotes && notes.length > 0 && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="mb-4 w-full"
+          onClick={onShareAllNotes}
+        >
+          <Share className="h-4 w-4 mr-2" />
+          Share All Notes
+        </Button>
+      )}
 
       <ScrollArea className="flex-1">
         <div className="space-y-2 pr-4">

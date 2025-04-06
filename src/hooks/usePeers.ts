@@ -46,9 +46,20 @@ export function usePeers() {
     }
   };
 
+  const shareNotes = async (noteIds: string[], peerId: string) => {
+    try {
+      await invoke("share_notes", { noteIds, peerId });
+      return true;
+    } catch (error) {
+      console.error("Failed to share notes:", error);
+      return false;
+    }
+  };
+
   return {
     peers,
     isLoading,
     shareNote,
+    shareNotes,
   };
 }

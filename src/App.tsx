@@ -15,13 +15,13 @@ import { ShareDialog } from "./components/ShareDialog";
 import { SyncNotificationList } from "./components/SyncNotificationList";
 import { listen } from "@tauri-apps/api/event";
 import "../dist/output.css";
-
+import { Button } from "./components/ui/button";
 const App: React.FC = () => {
   const [isDark, setIsDark] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("write");
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [noteToShare, setNoteToShare] = useState<any>(null);
+  const [notesToShare, setNotesToShare] = useState<any[]>([]);
 
   const {
     notes,
@@ -33,7 +33,7 @@ const App: React.FC = () => {
     deleteNote,
   } = useNotes();
 
-  const { peers, isLoading: peersLoading, shareNote } = usePeers();
+  const { peers, isLoading: peersLoading, shareNotes } = usePeers();
 
   const {
     notifications,
@@ -104,24 +104,37 @@ const App: React.FC = () => {
   };
 
   const handleShareNote = (note: any) => {
-    setNoteToShare(note);
+    setNotesToShare([note]);
     setShareDialogOpen(true);
   };
 
-  const handleShare = async (noteId: string, peerId: string) => {
+  const handleShareAllNotes = () => {
+    setNotesToShare(notes);
+    setShareDialogOpen(true);
+  };
+
+  const openNotesDir = async () => {
+    const path = await invoke<string>("open_notes_dir");
+    console.log(path);
+    open({ directory: true, defaultPath: path });
+  };
+
+  const handleShare = async (noteIds: string[], peerId: string) => {
     setIsSharing(true);
 
     try {
-      await shareNote(noteId, peerId);
+      await shareNotes(noteIds, peerId);
       toast({
         title: "Share requested",
-        description: "Waiting for response...",
+        description: `Waiting for response for ${noteIds.length} note${
+          noteIds.length > 1 ? "s" : ""
+        }...`,
       });
       setShareDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to share note",
+        description: "Failed to share notes",
         variant: "destructive",
       });
     } finally {
@@ -186,6 +199,7 @@ const App: React.FC = () => {
               onCreateNote={createNewNote}
               onThemeToggle={setIsDark}
               onShareNote={handleShareNote}
+              onShareAllNotes={handleShareAllNotes}
             />
           </Card>
 
@@ -208,9 +222,11 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {shareDialogOpen && noteToShare && (
+      <Button onClick={openNotesDir}>Open Notes Directory</Button>
+
+      {shareDialogOpen && notesToShare.length > 0 && (
         <ShareDialog
-          note={noteToShare}
+          notes={notesToShare}
           peers={peers}
           onShare={handleShare}
           onClose={() => setShareDialogOpen(false)}

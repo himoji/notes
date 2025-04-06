@@ -321,6 +321,84 @@ async fn share_note(
 }
 
 #[tauri::command]
+async fn share_notes(
+    app_handle: AppHandle<Wry>,
+    note_ids: Vec<String>,
+    peer_id: String,
+) -> Result<(), String> {
+    let state = app_handle.state::<Arc<Mutex<AppState>>>();
+
+    // Get the peer device - we need to drop the mutex guard before await
+    let peer = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state
+            .peers
+            .get(&peer_id)
+            .cloned()
+            .ok_or("Peer not found")?
+    };
+
+    // Get device_id
+    let device_id = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state.device_id.clone()
+    };
+
+    // Find the notes
+    let all_notes = get_notes(app_handle.clone()).await?;
+    let client = reqwest::Client::new();
+    let url = format!("http://{}:{}/sync/request", peer.ip, peer.port);
+
+    // Process each note
+    for note_id in note_ids {
+        // Find this specific note
+        let note = match all_notes.iter().find(|n| n.id == note_id) {
+            Some(n) => n.clone(),
+            None => continue, // Skip if not found
+        };
+
+        // Read attachments data
+        let mut attachments_data = HashMap::new();
+        let attachments_dir = get_attachments_dir(&app_handle, &note_id);
+
+        for attachment_name in &note.attachments {
+            let attachment_path = attachments_dir.join(attachment_name);
+            if attachment_path.exists() {
+                if let Ok(data) = fs::read(&attachment_path) {
+                    attachments_data.insert(attachment_name.clone(), data);
+                }
+            }
+        }
+
+        // Create the sync request
+        let sync_request = SyncRequest {
+            peer_id: device_id.clone(),
+            note: note.clone(),
+            attachments_data,
+        };
+
+        // Send the sync request to the peer
+        let client_clone = client.clone();
+        let url_clone = url.clone();
+
+        tokio::spawn(async move {
+            let result = client_clone
+                .post(&url_clone)
+                .json(&sync_request)
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await;
+
+            if let Err(e) = result {
+                println!("Failed to send sync request: {}", e);
+            }
+        });
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_sync_notifications(
     app_handle: AppHandle<Wry>,
 ) -> Result<Vec<SyncNotification>, String> {
@@ -446,6 +524,40 @@ async fn respond_to_sync(
     Ok(())
 }
 
+#[tauri::command]
+async fn open_notes_dir(app_handle: AppHandle<Wry>) -> Result<(), String> {
+    let path = get_notes_dir(&app_handle);
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        Command::new("explorer")
+            .args([path.to_str().unwrap()])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        Command::new("open")
+            .args([path.to_str().unwrap()])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        Command::new("xdg-open")
+            .args([path.to_str().unwrap()])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 fn main() {
     // Generate a unique device ID and name
     let device_id = uuid::Uuid::new_v4().to_string();
@@ -473,8 +585,10 @@ fn main() {
             serve_attachment,
             get_peers,
             share_note,
+            share_notes,
             get_sync_notifications,
-            respond_to_sync
+            respond_to_sync,
+            open_notes_dir
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
