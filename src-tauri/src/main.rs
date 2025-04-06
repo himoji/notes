@@ -644,7 +644,11 @@ fn main() {
 
                     // Try different ports
                     for port in 8000..8020 {
+                        // Try to get the local IP address - with fallback options for macOS
+                        let mut attempted_local_ip = false;
+                        
                         if let Ok(local_ip) = local_ip() {
+                            attempted_local_ip = true;
                             let addr = SocketAddr::new(local_ip, port);
                             if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
                                 bound_listener = Some(listener);
@@ -653,14 +657,27 @@ fn main() {
                                 break;
                             }
                         }
-
-                        // If external IP fails, try localhost
-                        let addr = SocketAddr::new(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), port);
-                        if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
-                            bound_listener = Some(listener);
-                            bound_port = port;
-                            bound_ip = IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
-                            break;
+                        
+                        // If local_ip failed or couldn't bind, try with explicit IP addresses
+                        if !attempted_local_ip || bound_listener.is_none() {
+                            // Try with IPv4 loopback first
+                            let addr = SocketAddr::new(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), port);
+                            if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
+                                bound_listener = Some(listener);
+                                bound_port = port;
+                                bound_ip = IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+                                break;
+                            }
+                            
+                            // Try with 0.0.0.0 (bind to all interfaces)
+                            let addr = SocketAddr::new(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), port);
+                            if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
+                                bound_listener = Some(listener);
+                                bound_port = port;
+                                // Use 127.0.0.1 for services even though bound to 0.0.0.0
+                                bound_ip = IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+                                break;
+                            }
                         }
                     }
 
@@ -897,7 +914,7 @@ fn main() {
                     let service_info = match ServiceInfo::new(
                         service_type,
                         &instance_name,
-                        &format!("{}.local.", device_name),
+                        "local.", // Use a fixed domain name instead of hostname-based one
                         ipv4_addr,
                         bound_port,
                         Some(properties),

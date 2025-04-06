@@ -9,6 +9,7 @@ export function useSyncNotifications() {
 
   const loadNotifications = async () => {
     try {
+      console.log("Loading sync notifications...");
       const syncNotifications = await invoke<SyncNotification[]>(
         "get_sync_notifications"
       );
@@ -30,12 +31,14 @@ export function useSyncNotifications() {
     init();
 
     // Listen for sync notification events
-    const unlisten = listen("sync-notification", async () => {
-      console.log("Received sync-notification event");
+    console.log("Setting up sync-notification event listener");
+    const unlisten = listen("sync-notification", async (event) => {
+      console.log("Received sync-notification event:", event);
       await loadNotifications();
     });
 
     return () => {
+      console.log("Cleaning up sync-notification event listener");
       unlisten.then((fn) => fn());
     };
   }, []);

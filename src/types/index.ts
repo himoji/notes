@@ -16,9 +16,9 @@ export interface PeerDevice {
 }
 
 export enum SyncStatus {
-  Pending = "pending",
-  Accepted = "accepted",
-  Rejected = "rejected",
+  Pending = "Pending",
+  Accepted = "Accepted",
+  Rejected = "Rejected",
 }
 
 export interface SyncNotification {
