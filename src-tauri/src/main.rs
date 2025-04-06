@@ -25,6 +25,7 @@ struct Note {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct SyncRequest {
     peer_id: String,
+    peer_name: String,
     note: Note,
     attachments_data: HashMap<String, Vec<u8>>,
 }
@@ -288,14 +289,16 @@ async fn share_note(
         }
     }
 
-    // Create the sync request
-    let device_id = {
+    // Get device info including name
+    let (device_id, device_name) = {
         let app_state = state.lock().map_err(|e| e.to_string())?;
-        app_state.device_id.clone()
+        (app_state.device_id.clone(), app_state.device_name.clone())
     };
 
+    // Create the sync request
     let sync_request = SyncRequest {
         peer_id: device_id,
+        peer_name: device_name,  // Use our local device name
         note: note.clone(),
         attachments_data,
     };
@@ -327,7 +330,7 @@ async fn share_notes(
     peer_id: String,
 ) -> Result<(), String> {
     println!("Sharing {} notes with peer {}", note_ids.len(), peer_id);
-
+    
     let state = app_handle.state::<Arc<Mutex<AppState>>>();
 
     // Get the peer device - we need to drop the mutex guard before await
@@ -339,26 +342,27 @@ async fn share_notes(
             .cloned()
             .ok_or("Peer not found")?
     };
-
+    
     println!("Found peer: {} at {}:{}", peer.name, peer.ip, peer.port);
 
-    // Get device_id
-    let device_id = {
+    // Get device info
+    let (device_id, device_name) = {
         let app_state = state.lock().map_err(|e| e.to_string())?;
-        app_state.device_id.clone()
+        (app_state.device_id.clone(), app_state.device_name.clone())
     };
 
     // Find the notes
     let all_notes = get_notes(app_handle.clone()).await?;
     let client = reqwest::Client::new();
     let url = format!("http://{}:{}/sync/request", peer.ip, peer.port);
-
+    
     println!("Will send requests to URL: {}", url);
+    println!("Our device: {} ({})", device_name, device_id);
 
     // Process each note
     for note_id in note_ids {
         println!("Processing note: {}", note_id);
-
+        
         // Find this specific note
         let note = match all_notes.iter().find(|n| n.id == note_id) {
             Some(n) => n.clone(),
@@ -377,18 +381,15 @@ async fn share_notes(
             if attachment_path.exists() {
                 if let Ok(data) = fs::read(&attachment_path) {
                     attachments_data.insert(attachment_name.clone(), data.clone());
-                    println!(
-                        "Added attachment: {}, size: {} bytes",
-                        attachment_name,
-                        data.len()
-                    );
+                    println!("Added attachment: {}, size: {} bytes", attachment_name, data.len());
                 }
             }
         }
 
-        // Create the sync request
+        // Create the sync request with correct device info
         let sync_request = SyncRequest {
             peer_id: device_id.clone(),
+            peer_name: device_name.clone(),  // Our own device name, not peer.name
             note: note.clone(),
             attachments_data,
         };
@@ -727,35 +728,29 @@ fn main() {
                                                     }
                                                 };
 
-                                                peer = match guard.peers.get(&sync_request.peer_id)
-                                                {
-                                                    Some(p) => {
-                                                        println!(
-                                                            "Found peer in peers list: {}",
-                                                            p.name
-                                                        );
-                                                        p.clone()
-                                                    }
-                                                    None => {
-                                                        println!(
-                                                            "Peer not found in peers list: {}",
-                                                            sync_request.peer_id
-                                                        );
-                                                        return axum::Json(serde_json::json!({
-                                                            "success": false,
-                                                            "error": "Peer not found"
-                                                        }));
-                                                    }
-                                                };
+                                                // When sharing notes, we don't require the peer to be in the peers list
+                                                // Instead, we'll use the peer_id from the sync request
+                                                let peer_info = guard.peers.get(&sync_request.peer_id);
+                                                
+                                                if let Some(p) = peer_info {
+                                                    println!("Found peer in peers list: {}", p.name);
+                                                    peer = p.clone();
+                                                } else {
+                                                    println!("Peer not in peers list, creating temporary peer entry");
+                                                    // Create a temporary peer device entry
+                                                    peer = PeerDevice {
+                                                        id: sync_request.peer_id.clone(),
+                                                        name: sync_request.peer_name.clone(), // Use the name from the request
+                                                        ip: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+                                                        port: 0, // We don't know the port
+                                                    };
+                                                }
 
                                                 // Create notification
                                                 notification_id = uuid::Uuid::new_v4().to_string();
                                                 note_title = sync_request.note.title.clone();
 
-                                                println!(
-                                                    "Creating notification: {} for note: {}",
-                                                    notification_id, note_title
-                                                );
+                                                println!("Creating notification: {} for note: {}", notification_id, note_title);
 
                                                 // Store the notification
                                                 guard.sync_notifications.push(SyncNotification {
@@ -764,11 +759,8 @@ fn main() {
                                                     note_title: note_title.clone(),
                                                     status: SyncStatus::Pending,
                                                 });
-
-                                                println!(
-                                                    "Current notifications count: {}",
-                                                    guard.sync_notifications.len()
-                                                );
+                                                
+                                                println!("Current notifications count: {}", guard.sync_notifications.len());
                                             }
 
                                             // Store the note temporarily
