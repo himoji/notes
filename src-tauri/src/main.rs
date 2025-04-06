@@ -326,6 +326,8 @@ async fn share_notes(
     note_ids: Vec<String>,
     peer_id: String,
 ) -> Result<(), String> {
+    println!("Sharing {} notes with peer {}", note_ids.len(), peer_id);
+
     let state = app_handle.state::<Arc<Mutex<AppState>>>();
 
     // Get the peer device - we need to drop the mutex guard before await
@@ -338,6 +340,8 @@ async fn share_notes(
             .ok_or("Peer not found")?
     };
 
+    println!("Found peer: {} at {}:{}", peer.name, peer.ip, peer.port);
+
     // Get device_id
     let device_id = {
         let app_state = state.lock().map_err(|e| e.to_string())?;
@@ -349,12 +353,19 @@ async fn share_notes(
     let client = reqwest::Client::new();
     let url = format!("http://{}:{}/sync/request", peer.ip, peer.port);
 
+    println!("Will send requests to URL: {}", url);
+
     // Process each note
     for note_id in note_ids {
+        println!("Processing note: {}", note_id);
+
         // Find this specific note
         let note = match all_notes.iter().find(|n| n.id == note_id) {
             Some(n) => n.clone(),
-            None => continue, // Skip if not found
+            None => {
+                println!("Note not found: {}", note_id);
+                continue; // Skip if not found
+            }
         };
 
         // Read attachments data
@@ -365,7 +376,12 @@ async fn share_notes(
             let attachment_path = attachments_dir.join(attachment_name);
             if attachment_path.exists() {
                 if let Ok(data) = fs::read(&attachment_path) {
-                    attachments_data.insert(attachment_name.clone(), data);
+                    attachments_data.insert(attachment_name.clone(), data.clone());
+                    println!(
+                        "Added attachment: {}, size: {} bytes",
+                        attachment_name,
+                        data.len()
+                    );
                 }
             }
         }
@@ -382,6 +398,7 @@ async fn share_notes(
         let url_clone = url.clone();
 
         tokio::spawn(async move {
+            println!("Sending sync request for note: {}", note.id);
             let result = client_clone
                 .post(&url_clone)
                 .json(&sync_request)
@@ -389,8 +406,20 @@ async fn share_notes(
                 .send()
                 .await;
 
-            if let Err(e) = result {
-                println!("Failed to send sync request: {}", e);
+            match result {
+                Ok(response) => {
+                    println!(
+                        "Sync request sent successfully for note: {}, status: {}",
+                        note.id,
+                        response.status()
+                    );
+                    if let Ok(text) = response.text().await {
+                        println!("Response body: {}", text);
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to send sync request for note {}: {}", note.id, e);
+                }
             }
         });
     }
@@ -665,6 +694,10 @@ fn main() {
                                         let app = request_handle.clone();
                                         async move {
                                             let sync_request = req.0;
+                                            println!(
+                                                "Received sync request from peer: {}",
+                                                sync_request.peer_id
+                                            );
 
                                             // Properly scope the state access
                                             let peer;
@@ -676,6 +709,7 @@ fn main() {
                                                 let mut guard = match state_arc.lock() {
                                                     Ok(guard) => guard,
                                                     Err(_) => {
+                                                        println!("Failed to lock app state");
                                                         return axum::Json(serde_json::json!({
                                                             "success": false,
                                                             "error": "Failed to lock app state"
@@ -685,8 +719,18 @@ fn main() {
 
                                                 peer = match guard.peers.get(&sync_request.peer_id)
                                                 {
-                                                    Some(p) => p.clone(),
+                                                    Some(p) => {
+                                                        println!(
+                                                            "Found peer in peers list: {}",
+                                                            p.name
+                                                        );
+                                                        p.clone()
+                                                    }
                                                     None => {
+                                                        println!(
+                                                            "Peer not found in peers list: {}",
+                                                            sync_request.peer_id
+                                                        );
                                                         return axum::Json(serde_json::json!({
                                                             "success": false,
                                                             "error": "Peer not found"
@@ -698,6 +742,11 @@ fn main() {
                                                 notification_id = uuid::Uuid::new_v4().to_string();
                                                 note_title = sync_request.note.title.clone();
 
+                                                println!(
+                                                    "Creating notification: {} for note: {}",
+                                                    notification_id, note_title
+                                                );
+
                                                 // Store the notification
                                                 guard.sync_notifications.push(SyncNotification {
                                                     id: notification_id.clone(),
@@ -705,6 +754,11 @@ fn main() {
                                                     note_title: note_title.clone(),
                                                     status: SyncStatus::Pending,
                                                 });
+
+                                                println!(
+                                                    "Current notifications count: {}",
+                                                    guard.sync_notifications.len()
+                                                );
                                             }
 
                                             // Store the note temporarily
@@ -713,11 +767,14 @@ fn main() {
                                                 let note = sync_request.note.clone();
                                                 let note_content =
                                                     format!("# {}\n\n{}", note.title, note.content);
-                                                if let Err(e) = fs::write(
-                                                    format!("{}.sync", path_str),
-                                                    note_content,
-                                                ) {
+                                                let sync_path = format!("{}.sync", path_str);
+                                                println!("Writing sync file to: {}", sync_path);
+
+                                                if let Err(e) = fs::write(&sync_path, note_content)
+                                                {
                                                     println!("Failed to write sync file: {}", e);
+                                                } else {
+                                                    println!("Successfully wrote sync file");
                                                 }
 
                                                 // Save any attachment files that were included
@@ -728,6 +785,11 @@ fn main() {
                                                         get_attachments_dir(&app, &note.id);
                                                     let attachment_path =
                                                         attachments_dir.join(file_name);
+                                                    println!(
+                                                        "Saving attachment: {} to path: {:?}",
+                                                        file_name, attachment_path
+                                                    );
+
                                                     if let Err(e) =
                                                         fs::write(&attachment_path, file_data)
                                                     {
@@ -735,12 +797,27 @@ fn main() {
                                                             "Failed to write attachment file: {}",
                                                             e
                                                         );
+                                                    } else {
+                                                        println!(
+                                                            "Successfully wrote attachment file"
+                                                        );
                                                     }
                                                 }
                                             }
 
                                             // Notify the frontend
-                                            let _ = app.emit("sync-notification", ());
+                                            println!(
+                                                "Emitting sync-notification event to frontend"
+                                            );
+                                            match app.emit("sync-notification", ()) {
+                                                Ok(_) => println!(
+                                                    "Successfully emitted sync-notification event"
+                                                ),
+                                                Err(e) => println!(
+                                                    "Failed to emit sync-notification event: {}",
+                                                    e
+                                                ),
+                                            }
 
                                             // Return success
                                             axum::Json(serde_json::json!({ "success": true }))

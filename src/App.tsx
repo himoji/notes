@@ -49,6 +49,7 @@ const App: React.FC = () => {
     // Listen for sync response events
     const unlisten = listen("sync-response", (event: any) => {
       const { accepted } = event.payload;
+      console.log("Received sync-response event:", event.payload);
       toast({
         title: accepted ? "Note Shared" : "Share Rejected",
         description: accepted
@@ -62,6 +63,11 @@ const App: React.FC = () => {
       unlisten.then((fn) => fn());
     };
   }, []);
+
+  // Add effect to log when notifications change
+  useEffect(() => {
+    console.log("Notifications updated:", notifications);
+  }, [notifications]);
 
   const handleImageUpload = async () => {
     if (!selectedNote) return;

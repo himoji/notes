@@ -9,11 +9,12 @@ export function useSyncNotifications() {
 
   const loadNotifications = async () => {
     try {
-      const loadedNotifications = await invoke<SyncNotification[]>(
+      const syncNotifications = await invoke<SyncNotification[]>(
         "get_sync_notifications"
       );
-      setNotifications(loadedNotifications);
-      return loadedNotifications;
+      console.log("Loaded sync notifications:", syncNotifications);
+      setNotifications(syncNotifications);
+      return syncNotifications;
     } catch (error) {
       console.error("Failed to load sync notifications:", error);
       return [];
@@ -30,6 +31,7 @@ export function useSyncNotifications() {
 
     // Listen for sync notification events
     const unlisten = listen("sync-notification", async () => {
+      console.log("Received sync-notification event");
       await loadNotifications();
     });
 
@@ -40,7 +42,13 @@ export function useSyncNotifications() {
 
   const respondToSync = async (notificationId: string, accept: boolean) => {
     try {
+      console.log(
+        `Responding to sync notification ${notificationId}: ${
+          accept ? "accept" : "reject"
+        }`
+      );
       await invoke("respond_to_sync", { notificationId, accept });
+      console.log("respond_to_sync invoke completed successfully");
       await loadNotifications();
       return true;
     } catch (error) {
